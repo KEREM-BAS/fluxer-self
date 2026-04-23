@@ -70,6 +70,7 @@ devenv.local.nix
 **/.devserver-cache.json
 /.fluxer/
 /config/config.json
+/config/livekit.yaml
 /fluxer_app/src/assets/emoji-sprites/
 /fluxer_app/src/components/uikit/AvatarStatusGeometry.ts
 /fluxer_app/src/components/uikit/SVGMasks.tsx
@@ -93,4 +94,3 @@ geoip_data
 next-env.d.ts
 .github/agents
 .github/prompts
-/docs

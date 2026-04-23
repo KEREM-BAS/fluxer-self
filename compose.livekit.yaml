@@ -1,0 +1,25 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
+services:
+  livekit:
+    image: livekit/livekit-server:v1.9.11
+    container_name: livekit
+    restart: unless-stopped
+    command: ['--config', '/etc/livekit/livekit.yaml']
+    volumes:
+      - ./config/livekit.yaml:/etc/livekit/livekit.yaml:ro
+    ports:
+      - '${LIVEKIT_SIGNAL_PORT:-7880}:7880'
+      - '7881:7881/tcp'
+      - '3478:3478/udp'
+      - '50000-50100:50000-50100/udp'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:7880 || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging

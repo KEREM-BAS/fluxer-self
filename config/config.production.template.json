@@ -8,7 +8,7 @@
 	},
 	"database": {
 		"backend": "sqlite",
-		"sqlite_path": "./data/fluxer.db"
+		"sqlite_path": "/usr/src/app/data/db/fluxer.db"
 	},
 	"internal": {
 		"kv": "redis://valkey:6379/0",
@@ -32,7 +32,7 @@
 			"oauth_client_secret": "GENERATE_A_64_CHAR_HEX_SECRET"
 		},
 		"marketing": {
-			"enabled": true,
+			"enabled": false,
 			"secret_key_base": "GENERATE_A_64_CHAR_HEX_SECRET"
 		},
 		"gateway": {
@@ -59,6 +59,13 @@
 			"engine": "meilisearch",
 			"url": "http://meilisearch:7700",
 			"api_key": "YOUR_MEILISEARCH_API_KEY"
+		},
+		"voice": {
+			"enabled": true,
+			"url": "wss://voice.example.com",
+			"api_key": "YOUR_LIVEKIT_API_KEY",
+			"api_secret": "YOUR_LIVEKIT_API_SECRET",
+			"webhook_url": "https://chat.example.com/api/webhooks/livekit"
 		}
 	}
 }
