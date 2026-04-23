@@ -4,28 +4,38 @@ Bu rehber Fluxer'ı küçük bir arkadaş grubu için Dokploy üzerinde canlıya
 
 > ⚠️ **Upstream uyarısı:** [fluxer_docs/self-hosting/index.mdx](../fluxer_docs/self-hosting/index.mdx) maintainer'lar veri persistence katmanı refactor'ı tamamlanana kadar self-host etmemeyi öneriyor. Küçük grup + düzenli backup ile uygulanabilir; production'a critical data yazma.
 
+## Bu branch'te uygulanan fix'ler
+
+Upstream `:stable` image'daki bilinen bug'lar için source build yapılıyor. Uygulanan fix'ler:
+
+| Fix | Dosya | Issue |
+|---|---|---|
+| CSP fluxerstatic.com izni | [fluxer_server/src/ServiceInitializer.tsx](../fluxer_server/src/ServiceInitializer.tsx) | [#558](https://github.com/fluxerapp/fluxer/issues/558) |
+| Dockerfile packages/app referansı kaldırıldı | [fluxer_server/Dockerfile](../fluxer_server/Dockerfile) | SORUN-01 |
+| app-build stage'e Rust 1.93.0 + wasm-pack | [fluxer_server/Dockerfile](../fluxer_server/Dockerfile) | SORUN-02 |
+| Eksik packages/* package.json COPY'ları | [fluxer_server/Dockerfile](../fluxer_server/Dockerfile) | SORUN-05 |
+| pnpm versiyonu 10.26.0 → 10.29.3 | [fluxer_server/Dockerfile](../fluxer_server/Dockerfile) | SORUN-06 |
+| NATS core + jetstream split (upstream convention) | [compose.yaml](../compose.yaml), [config.json](../config/config.json) | [#559](https://github.com/fluxerapp/fluxer/issues/559) |
+| BASE_DOMAIN build arg ile bundle'a gömme | [fluxer_server/Dockerfile](../fluxer_server/Dockerfile) | [#559](https://github.com/fluxerapp/fluxer/issues/559) |
+| LiveKit webhook api_key alanı | [config/livekit.yaml](../config/livekit.yaml) | [#559](https://github.com/fluxerapp/fluxer/issues/559) |
+
 ## Mimari
 
 İki ayrı Dokploy Compose uygulaması:
 
 | App | Servisler | Domain | Portlar |
 |---|---|---|---|
-| **fluxer-app** | fluxer_server + valkey + nats | `chat.<yourdomain>` | 8080 (Traefik) |
+| **fluxer-app** | fluxer_server + valkey + nats_core + nats_jetstream | `chat.<yourdomain>` | 8080 (Traefik) |
 | **fluxer-livekit** | livekit | `voice.<yourdomain>` | 7880 (Traefik) + 3478/udp, 7881/tcp, 50000-50100/udp (direct) |
-
-Kritik nokta: LiveKit UDP portları Traefik'i bypass etmeli (Traefik UDP proxy yapamaz). Dokploy "Published Ports" ile host'a direkt bind edilir.
-
----
 
 ## 1. Önkoşullar
 
 ### VPS
-- Dokploy kurulu, public IP
-- **Minimum**: 2 CPU, 4 GB RAM, 30 GB disk
-- Önerilen: 4 CPU, 8 GB RAM (LiveKit + monolith + Valkey + NATS birlikte)
+- Dokploy kurulu, public IP'li VPS
+- **Minimum**: 4 CPU, 8 GB RAM, 30 GB disk (build için Rust compile ~4GB bellek)
+- Source build ilk defa: ~15-30 dakika. Cache ile sonrakiler: ~2-5 dakika.
 
 ### Firewall (VPS provider + VPS iptables/ufw)
-Açılması gereken portlar:
 
 | Port | Protokol | Kullanım |
 |---|---|---|
@@ -46,7 +56,6 @@ sudo ufw allow 50000:50100/udp
 ```
 
 ### DNS
-Bir domain'in altına iki A record:
 ```
 chat.<yourdomain>   A   <VPS_IP>
 voice.<yourdomain>  A   <VPS_IP>
@@ -67,7 +76,7 @@ done
 echo "S3_ACCESS=$(openssl rand -hex 16)"
 echo "S3_SECRET=$(openssl rand -hex 32)"
 
-# VAPID (web push) — bir kez node/npx ile
+# VAPID (web push)
 npx web-push generate-vapid-keys
 
 # LiveKit API key/secret
@@ -75,41 +84,43 @@ echo "LIVEKIT_API_KEY=APIkey$(openssl rand -hex 6)"
 echo "LIVEKIT_API_SECRET=$(openssl rand -hex 32)"
 ```
 
-## 3. Config dosyaları hazırla
+## 3. Config dosyaları
 
 ### `config/config.json` (fluxer-app için)
+[config/config.production.template.json](../config/config.production.template.json) → `config/config.json` kopyası. Tüm placeholder'ları üretilen secret'lar ve gerçek domain ile doldur.
 
-[config/config.production.template.json](../config/config.production.template.json) dosyasını `config/config.json` olarak kopyala ve doldur:
+Dikkat edilecekler:
+- `services.nats.core_url` = `nats://nats_core:4222`
+- `services.nats.jetstream_url` = `nats://nats_jetstream:4223`
+- `services.nats.auth_token` = compose'daki `NATS_AUTH_TOKEN` env ile aynı
+- `integrations.voice.*` = LiveKit key/secret, livekit.yaml ile aynı
 
-- Tüm `GENERATE_A_64_CHAR_HEX_SECRET` → adım 2'den hex secret'lar
-- `YOUR_S3_ACCESS_KEY` / `YOUR_S3_SECRET_KEY` → S3 credentials
-- `YOUR_VAPID_PUBLIC_KEY` / `YOUR_VAPID_PRIVATE_KEY` → VAPID keypair
-- `YOUR_LIVEKIT_API_KEY` / `YOUR_LIVEKIT_API_SECRET` → LiveKit credentials (livekit.yaml ile aynı)
-- `chat.example.com` → gerçek chat domain'i
-- `voice.example.com` → gerçek voice domain'i
-- `services.nats.auth_token` → NATS_AUTH_TOKEN ile aynı (adım 2'deki `nats_token`)
-
-**Önerilen:** Arama kullanmıyorsanız `integrations.search` bloğunu silin veya `api_key`'i boş bırakın → [NullSearchProvider](../packages/api/src/SearchFactory.tsx) graceful fallback çalışır.
-
-**Önerilen:** Email provider yoksa `integrations.email` eklemeyin (template'de yok). Signup'ta verification emaili gönderilmeyecek; ilk kullanıcıları manuel verify edin (bkz. adım 8).
+Dosya `.gitignore`'da; commit edilmez.
 
 ### `config/livekit.yaml` (fluxer-livekit için)
+[config/livekit.example.yaml](../config/livekit.example.yaml) → `config/livekit.yaml`. API key/secret ve webhook URL'yi doldur.
 
-[config/livekit.example.yaml](../config/livekit.example.yaml) dosyasını `config/livekit.yaml` olarak kopyala ve:
-- `<replace-with-api-key>` → LIVEKIT_API_KEY
-- `<replace-with-api-secret>` → LIVEKIT_API_SECRET
-- `https://chat.example.com/api/webhooks/livekit` → gerçek chat domain
+## 4. Commit & Push
 
-İki dosya da `.gitignore`'da; commit edilmezler.
+Source build için repo commit edilmiş olmalı, Dokploy git clone yapıp build edecek.
 
-## 4. Dokploy'da LiveKit app deploy et (önce bu)
+```bash
+git checkout -b deploy  # veya refactor branch üzerinde kal
+git add compose.yaml compose.livekit.yaml fluxer_server/ config/ docs/DOKPLOY_DEPLOY.md .gitignore
+git commit -m "feat: Dokploy source build + #558 CSP + #559 NATS split fixes"
+git push origin deploy
+```
+
+`config/config.json` ve `config/livekit.yaml` `.gitignore`'da, push'lanmaz. Bunlar Dokploy'a UI üzerinden "File Mount" ile yüklenecek.
+
+## 5. Dokploy'da LiveKit app deploy
 
 1. Dokploy UI → Projects → Create Project: `fluxer-livekit`
 2. Create Service → **Compose**
-3. Compose source: [compose.livekit.yaml](../compose.livekit.yaml) içeriğini yapıştır
+3. Compose kaynağı: Git repo → `refactor` (veya `deploy`) branch, dosya yolu: `compose.livekit.yaml`
 4. **Mounts** (file mount):
    - Path: `./config/livekit.yaml`
-   - Content: adım 3'teki `config/livekit.yaml` içeriği
+   - Content: lokal `config/livekit.yaml` içeriği
 5. **Domains** → Traefik:
    - Host: `voice.<yourdomain>`
    - Container port: `7880`
@@ -119,30 +130,37 @@ echo "LIVEKIT_API_SECRET=$(openssl rand -hex 32)"
    - `7881:7881/tcp`
    - `50000-50100:50000-50100/udp`
 7. Deploy
-8. **Doğrulama**:
-   - `curl -I https://voice.<yourdomain>/` → HTTP 200/404 response (LiveKit HTTP endpoint'i var)
-   - `nc -vzu <VPS_IP> 3478` → `succeeded` çıktısı
+8. **Doğrulama**: `curl -I https://voice.<yourdomain>/`, `nc -vzu <VPS_IP> 3478`
 
-## 5. Dokploy'da fluxer-app deploy et
+## 6. Dokploy'da fluxer-app deploy (source build)
 
 1. Dokploy UI → Projects → Create Project: `fluxer-app`
 2. Create Service → **Compose**
-3. Compose source: repo kökündeki [compose.yaml](../compose.yaml) içeriğini yapıştır (NATS servisi ile birlikte güncel hali)
+3. Compose kaynağı: Git repo → `deploy` branch, dosya yolu: `compose.yaml`
 4. **Mounts**:
    - Path: `./config/config.json`
-   - Content: adım 3'teki `config/config.json` içeriği
-5. **Environment vars**:
-   - `NATS_AUTH_TOKEN=<adım 2'deki nats_token>` (compose'da `${NATS_AUTH_TOKEN:?}` olarak referanslı, zorunlu)
+   - Content: lokal `config/config.json` içeriği
+5. **Environment vars** (kritik):
+   - `NATS_AUTH_TOKEN=<secrets adım 2'de üretilen nats_token>`
+   - `BASE_DOMAIN=chat.<yourdomain>`
+   - `PUBLIC_SCHEME=https`
+   - `PUBLIC_PORT=443`
 6. **Domains** → Traefik:
    - Host: `chat.<yourdomain>`
    - Service: `fluxer_server`
    - Container port: `8080`
    - HTTPS: enabled
-7. Dokploy volume binding: `valkey_data`, `nats_data`, `fluxer_data` otomatik yaratılır (persistent volume)
-8. Health check: compose'daki `/_health` zaten tanımlı
-9. Deploy
+7. Dokploy persistent volumes: `valkey_data`, `nats_jetstream_data`, `fluxer_data`
+8. Deploy — ilk build ~15-30dk (Rust compile + pnpm install + rspack build). Dokploy build logs'u izle.
 
-## 6. İlk boot doğrulama
+### İlk build hata mesajları
+
+- **"COPY packages/*/package.json not found"** → Yeni bir package eklendi, Dockerfile'a eklenmemiş. `ls packages/`'e karşı Dockerfile'daki COPY'ları karşılaştır.
+- **"rustup: command not found"** → Dockerfile'ın app-build stage'inde rustup install satırı atlandı, Read Dockerfile.
+- **"wasm-pack build failed"** → Rust version mismatch, fluxer_app/rust-toolchain.toml kontrol (1.93.0).
+- **"FLUXER_CONFIG must be set"** → `BASE_DOMAIN` env var build arg olarak geçirilmedi.
+
+## 7. İlk boot doğrulama
 
 Dokploy UI → fluxer-app → Logs → `fluxer_server`:
 
@@ -152,105 +170,90 @@ Beklenen log satırları:
 - `JetStream stream and consumer verified`
 - `HTTP server listening on 0.0.0.0:8080`
 
-### Sık hata: `JetStream connection failed`
-Sebep: `NATS_AUTH_TOKEN` env var'ı compose'da set edilmemiş **veya** `config.json`'daki `services.nats.auth_token` ile uyuşmuyor.
-Çözüm: İki yerde aynı değer mi kontrol et, app'i redeploy et.
-
-### Sık hata: `Config not loaded`
-Sebep: `config.json` file mount path yanlış.
-Çözüm: Dokploy mount config'inde path `/usr/src/app/config/config.json` (Dockerfile `ENV FLUXER_CONFIG=/usr/src/app/config/config.json` bekliyor) olmalı.
-
-## 7. Web arayüzü testi
-
-`https://chat.<yourdomain>` → Fluxer login ekranı yüklenmeli.
-
-Browser DevTools → Network → WS sekmesi: `wss://chat.<yourdomain>/gateway` upgrade başarılı mı?
-
 ## 8. İlk kullanıcı + manuel verify
 
-Signup akışı → email girdiğinde verification maili gitmeyecek (email provider yok). Manuel verify:
+Signup akışı → email verification maili gitmeyecek (email provider yok). Manuel verify:
 
 ```bash
-# Dokploy VPS'te SSH ile bağlan:
 docker exec -it fluxer_server sqlite3 /usr/src/app/data/db/fluxer.db
 ```
 
-SQLite shell'de:
 ```sql
--- Kolonu doğrula (şema değişebilir):
 PRAGMA table_info(users);
-
--- Email doğrulandı olarak işaretle:
 UPDATE users SET email_verified = 1 WHERE email = 'you@example.com';
-
--- (Gerekirse) Admin yetkisi ver:
 UPDATE users SET is_admin = 1 WHERE email = 'you@example.com';
-
 .quit
 ```
-
-Login ol, bir community/sunucu oluştur, bir text channel + bir voice channel ekle.
 
 ## 9. Canlı smoke test
 
 Hepsi çalışmıyorsa deploy başarısız.
 
 ### Chat
-- [ ] İki tarayıcıda (normal + incognito) signup + manuel verify
-- [ ] Text channel'da mesaj gönder → karşı taraf anında görüyor mu
-- [ ] Emoji reaction, reply, typing indicator çalışıyor mu
-- [ ] Görsel upload (media proxy testi)
+- [ ] İki tarayıcıda signup + manuel verify
+- [ ] Text channel'da mesaj gönder → realtime
+- [ ] Emoji reaction, reply, typing indicator
+- [ ] Görsel upload
 
 ### Voice
 - [ ] Voice channel'a iki tarayıcıdan katıl
-- [ ] Karşılıklı ses duyuluyor mu
-- [ ] `chrome://webrtc-internals/` → ICE state `connected`, port range 50000-50100
-- [ ] **Ses yok ama bağlı** → UDP firewall kapalı: `nc -vzu <VPS_IP> 3478` ve `50005` (range içi) test
+- [ ] Karşılıklı ses
+- [ ] `chrome://webrtc-internals/` → ICE state `connected`
 
 ### Video
-- [ ] Voice channel içinde kamera aç → karşıda görüntü
-- [ ] Screen share → paylaşım çalışıyor
+- [ ] Kamera aç, screen share
 
-### TLS / Network
-- [ ] `curl -I https://chat.<yourdomain>/` → 200, valid cert
-- [ ] `curl -I https://voice.<yourdomain>/` → LiveKit response
-- [ ] Browser console'da CORS veya mixed-content error yok
+### CSP / TLS
+- [ ] Browser DevTools Console: **CSP violation yok** (fluxerstatic.com istekleri başarılı olmalı)
+- [ ] IBM Plex fontlar yükleniyor
+- [ ] Favicon görünüyor
+- [ ] `curl -I https://chat.<yourdomain>/` → 200
 
-## 10. Backup (deploy sonrası hemen ayarla)
+## 10. Known Issues (deploy sonrası iteratif)
 
-Fluxer'ın tüm durumu `fluxer_data` volume'unda:
-- `data/db/fluxer.db` — SQLite tüm veritabanı (mesajlar, kullanıcılar, sunucular)
-- `data/storage/` — dosya upload'ları
-- `data/queue/` — worker queue state
+Bu bug'lar upstream server runtime bug'ları, kod incelemesi + reprodüksiyon + upstream source dive gerektirir. Bu deploy'da fix edilmedi; canlıda test edip etkili olanlara tek tek investigation açılır:
 
-Günlük cron ile volume snapshot:
+| Issue | Tespit yöntemi | İlk workaround |
+|---|---|---|
+| [#582](https://github.com/fluxerapp/fluxer/issues/582) — upload 30s timeout | >40MB dosya upload dene | Dosya boyutunu sınırla, büyükler için external link |
+| [#885](https://github.com/fluxerapp/fluxer/issues/885) — VC timeout stuck | AFK 1 saat kal | Moderator manuel disconnect |
+| [#876](https://github.com/fluxerapp/fluxer/issues/876) — choppy VC | Birkaç kişi VC | LiveKit CPU/bandwidth monitor |
+| [#870](https://github.com/fluxerapp/fluxer/issues/870) — ses yok | Mikrofon test | Browser permission check |
+| [#829](https://github.com/fluxerapp/fluxer/issues/829) — canary connectivity | Uzun VC seansı | LiveKit log kontrol |
+| [#775](https://github.com/fluxerapp/fluxer/issues/775) — yeni user VC'yi bozuyor | 3+ kişi join | Rejoin workaround |
+| [#890](https://github.com/fluxerapp/fluxer/issues/890) — screen share kalite | Paylaşım testi | Bandwidth, simulcast kontrol |
+| [#906](https://github.com/fluxerapp/fluxer/issues/906) — Linux screen share | Linux user | Firefox/Chrome pipewire |
+| [#810](https://github.com/fluxerapp/fluxer/issues/810) — emoji channel name | Channel adında emoji | Emoji kullanma |
+
+## 11. Backup
+
 ```bash
-# VPS'te:
+# VPS cron:
 0 3 * * * docker exec fluxer_server sqlite3 /usr/src/app/data/db/fluxer.db ".backup /usr/src/app/data/backup-$(date +\%Y\%m\%d).db"
-# Daha sonra rsync/rclone ile dış storage'a kopyala.
 ```
 
 ## Sorun giderme
 
-### fluxer_server sürekli restart ediyor
-- `docker logs fluxer_server --tail 50` ile hatayı gör
-- En sık: NATS connection fail, config.json path yanlış, secret eksik
+### fluxer_server sürekli restart
+- `docker logs fluxer_server --tail 50`
+- NATS connection fail → `NATS_AUTH_TOKEN` env var compose'da + config.json'da aynı mı
+- Config path yanlış → mount `/usr/src/app/config/config.json` olmalı
 
-### Voice çalışmıyor, "connection failed"
-- LiveKit logs: `docker logs livekit --tail 50`
-- `voice.<domain>` DNS doğru mu, `wss://` bağlantı işaretini tarayıcıda aç
-- LiveKit'in public key'i config.json'daki ile aynı mı
+### Build çok uzun sürüyor
+- İlk build 15-30dk normal (Rust kurulumu + full pnpm install + WASM + rspack). Dokploy BuildKit cache sonraki build'lerde kullanır.
+- OOM → VPS RAM düşükse swap ekle veya daha büyük VPS
 
-### "NATS_AUTH_TOKEN not set" hatası
-- Dokploy Environment Variables sekmesinde bu env var set edilmeli, yoksa compose başlamaz
+### Voice bağlantı kuruluyor ama ses yok
+- UDP firewall: `nc -vzu <VPS_IP> 3478`
+- LiveKit log: `docker logs livekit`
+- `wss://voice.<yourdomain>` signaling OK, UDP media portları block olabilir
 
-### Image pull 403/404
-- `ghcr.io/fluxerapp/fluxer-server:stable` public mi kontrol et: `docker pull ghcr.io/fluxerapp/fluxer-server:stable` lokalde çalışıyor mu
-- Private ise `FLUXER_SERVER_IMAGE` env var ile kendi registry override et
+### Image pull/build 403
+- Source build kullanıyoruz, pull yok. Git clone erişim var mı kontrol et.
 
 ## Referanslar
 
-- [Upstream self-hosting overview](../fluxer_docs/self-hosting/index.mdx)
-- [Config schema reference](../fluxer_docs/self-hosting/configuration.mdx)
-- [Bilinen sorunlar](./PROJECT_STRUCTURE.md) — SORUN-01..14
-- [LiveKit deployment docs](https://docs.livekit.io/home/self-hosting/deployment/)
+- [Upstream self-hosting docs](../fluxer_docs/self-hosting/index.mdx)
+- [Config schema](../fluxer_docs/self-hosting/configuration.mdx)
+- [Bilinen deploy sorunları](./PROJECT_STRUCTURE.md) — SORUN-01..14
+- [LiveKit deployment](https://docs.livekit.io/home/self-hosting/deployment/)

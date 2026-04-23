@@ -19,18 +19,18 @@ services:
       retries: 5
     logging: *default-logging
 
-  nats:
+  nats_core:
     image: nats:2.10-alpine
-    container_name: nats
+    container_name: nats_core
     restart: unless-stopped
     command:
-      - '-js'
-      - '--store_dir=/data'
+      - '-p'
+      - '4222'
+      - '-a'
+      - '0.0.0.0'
       - '-m'
       - '8222'
       - '--auth=${NATS_AUTH_TOKEN:?Set NATS_AUTH_TOKEN in .env or environment}'
-    volumes:
-      - nats_data:/data
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8222/healthz']
       interval: 10s
@@ -38,8 +38,38 @@ services:
       retries: 5
     logging: *default-logging
 
+  nats_jetstream:
+    image: nats:2.10-alpine
+    container_name: nats_jetstream
+    restart: unless-stopped
+    command:
+      - '-p'
+      - '4223'
+      - '-a'
+      - '0.0.0.0'
+      - '-m'
+      - '8223'
+      - '-js'
+      - '--store_dir=/data'
+      - '--auth=${NATS_AUTH_TOKEN:?Set NATS_AUTH_TOKEN in .env or environment}'
+    volumes:
+      - nats_jetstream_data:/data
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8223/healthz']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
   fluxer_server:
-    image: ${FLUXER_SERVER_IMAGE:-ghcr.io/fluxerapp/fluxer-server:stable}
+    image: ${FLUXER_SERVER_IMAGE:-fluxer-self:latest}
+    build:
+      context: .
+      dockerfile: fluxer_server/Dockerfile
+      args:
+        BASE_DOMAIN: ${BASE_DOMAIN:?Set BASE_DOMAIN in .env or environment (e.g. chat.yourdomain.com)}
+        PUBLIC_SCHEME: ${PUBLIC_SCHEME:-https}
+        PUBLIC_PORT: ${PUBLIC_PORT:-443}
     container_name: fluxer_server
     restart: unless-stopped
     init: true
@@ -51,7 +81,9 @@ services:
     depends_on:
       valkey:
         condition: service_healthy
-      nats:
+      nats_core:
+        condition: service_healthy
+      nats_jetstream:
         condition: service_healthy
     volumes:
       - ./config:/usr/src/app/config:ro
@@ -128,7 +160,7 @@ services:
 
 volumes:
   valkey_data:
-  nats_data:
+  nats_jetstream_data:
   fluxer_data:
   meilisearch_data:
   elasticsearch_data:

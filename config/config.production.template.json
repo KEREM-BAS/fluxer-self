@@ -41,8 +41,8 @@
 			"media_proxy_endpoint": "http://127.0.0.1:8080/media"
 		},
 		"nats": {
-			"core_url": "nats://nats:4222",
-			"jetstream_url": "nats://nats:4222",
+			"core_url": "nats://nats_core:4222",
+			"jetstream_url": "nats://nats_jetstream:4223",
 			"auth_token": "GENERATE_A_NATS_AUTH_TOKEN"
 		}
 	},

@@ -36,6 +36,7 @@ import {JetStreamWorkerQueue} from '@fluxer/api/src/worker/JetStreamWorkerQueue'
 import {WorkerService} from '@fluxer/api/src/worker/WorkerService';
 import {createAppServer} from '@fluxer/app_proxy/src/AppServer';
 import type {AppServerResult} from '@fluxer/app_proxy/src/AppServerTypes';
+import {CSP_HOSTS} from '@fluxer/app_proxy/src/app_server/utils/CSP';
 import {getBuildMetadata} from '@fluxer/config/src/BuildMetadata';
 import {ADMIN_OAUTH2_APPLICATION_ID} from '@fluxer/constants/src/Core';
 import {createServiceTelemetry} from '@fluxer/hono/src/middleware/TelemetryAdapters';
@@ -288,13 +289,15 @@ function createAppServerInitializer(context: ServiceInitializationContext): Serv
 		},
 		cspDirectives: {
 			defaultSrc: ["'self'"],
-			scriptSrc: ["'self'", "'unsafe-inline'"],
-			styleSrc: ["'self'", "'unsafe-inline'"],
-			imgSrc: ["'self'", 'data:', 'blob:', publicUrlHost, mediaUrlHost],
-			connectSrc: ["'self'", 'wss:', 'ws:', publicUrlHost],
-			fontSrc: ["'self'"],
-			mediaSrc: ["'self'", 'blob:', mediaUrlHost],
+			scriptSrc: ["'self'", "'unsafe-inline'", ...CSP_HOSTS.SCRIPT],
+			styleSrc: ["'self'", "'unsafe-inline'", ...CSP_HOSTS.STYLE],
+			imgSrc: ["'self'", 'data:', 'blob:', publicUrlHost, mediaUrlHost, ...CSP_HOSTS.IMAGE],
+			connectSrc: ["'self'", 'wss:', 'ws:', publicUrlHost, ...CSP_HOSTS.CONNECT],
+			fontSrc: ["'self'", ...CSP_HOSTS.FONT],
+			mediaSrc: ["'self'", 'blob:', mediaUrlHost, ...CSP_HOSTS.MEDIA],
 			frameSrc: ["'none'"],
+			workerSrc: ["'self'", 'blob:', ...CSP_HOSTS.WORKER],
+			manifestSrc: ["'self'", ...CSP_HOSTS.MANIFEST],
 		},
 	});
 
