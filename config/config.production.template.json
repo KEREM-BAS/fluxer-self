@@ -53,6 +53,9 @@
 		"vapid": {
 			"public_key": "YOUR_VAPID_PUBLIC_KEY",
 			"private_key": "YOUR_VAPID_PRIVATE_KEY"
+		},
+		"bluesky": {
+			"enabled": false
 		}
 	},
 	"integrations": {
@@ -66,7 +69,14 @@
 			"url": "wss://voice.example.com",
 			"api_key": "YOUR_LIVEKIT_API_KEY",
 			"api_secret": "YOUR_LIVEKIT_API_SECRET",
-			"webhook_url": "https://chat.example.com/api/webhooks/livekit"
+			"webhook_url": "https://chat.example.com/api/webhooks/livekit",
+			"default_region": {
+				"id": "default",
+				"name": "Default",
+				"emoji": "🌐",
+				"latitude": 41.0082,
+				"longitude": 28.9784
+			}
 		}
 	}
 }
