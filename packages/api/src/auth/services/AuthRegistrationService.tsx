@@ -293,7 +293,7 @@ export class AuthRegistrationService {
 				bot: false,
 				system: false,
 				email: rawEmail,
-				email_verified: false,
+				email_verified: true,
 				email_bounced: false,
 				phone: null,
 				password_hash: passwordHash,
