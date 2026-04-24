@@ -41,4 +41,6 @@
 dev
 !fluxer_app/dist
 !fluxer_app/dist/**
+!fluxer_app/scripts/build
+!fluxer_app/scripts/build/**
 !fluxer_devops/cassandra/migrations
