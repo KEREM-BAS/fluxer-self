@@ -86,7 +86,7 @@ services:
       nats_jetstream:
         condition: service_healthy
     volumes:
-      - ./config:/usr/src/app/config:ro
+      - ../files/config/config.json:/usr/src/app/config/config.json:ro
       - fluxer_data:/usr/src/app/data
     healthcheck:
       test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:8080/_health || exit 1']

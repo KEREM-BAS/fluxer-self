@@ -11,7 +11,7 @@ services:
     restart: unless-stopped
     command: ['--config', '/etc/livekit/livekit.yaml']
     volumes:
-      - ./config/livekit.yaml:/etc/livekit/livekit.yaml:ro
+      - ../files/config/livekit.yaml:/etc/livekit/livekit.yaml:ro
     ports:
       - '${LIVEKIT_SIGNAL_PORT:-7880}:7880'
       - '7881:7881/tcp'
