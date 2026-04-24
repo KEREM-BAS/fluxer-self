@@ -70,6 +70,7 @@ services:
         BASE_DOMAIN: ${BASE_DOMAIN:?Set BASE_DOMAIN in .env or environment (e.g. chat.yourdomain.com)}
         PUBLIC_SCHEME: ${PUBLIC_SCHEME:-https}
         PUBLIC_PORT: ${PUBLIC_PORT:-443}
+        INCLUDE_NSFW_ML: ${INCLUDE_NSFW_ML:-true}
     container_name: fluxer_server
     restart: unless-stopped
     init: true
