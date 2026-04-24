@@ -97,6 +97,19 @@ services:
       start_period: 30s
     logging: *default-logging
 
+  sqlite_web:
+    image: coleifer/sqlite-web:latest
+    container_name: sqlite_web
+    restart: unless-stopped
+    command: ['sqlite_web', '--host=0.0.0.0', '--port=8080', '--password', '/data/db/fluxer.db']
+    environment:
+      SQLITE_WEB_PASSWORD: ${SQLITE_WEB_PASSWORD:?Set SQLITE_WEB_PASSWORD in env}
+    expose:
+      - '8080'
+    volumes:
+      - fluxer_data:/data
+    logging: *default-logging
+
 volumes:
   valkey_data:
   nats_jetstream_data:
