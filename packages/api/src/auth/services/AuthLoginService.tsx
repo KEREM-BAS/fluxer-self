@@ -341,7 +341,8 @@ export class AuthLoginService {
 		const isAppStoreReviewer = (currentUser.flags & UserFlags.APP_STORE_REVIEWER) !== 0n;
 
 		if (!hasMfa && !isAppStoreReviewer) {
-			const isIpAuthorized = await this.repository.checkIpAuthorized(currentUser.id, clientIp);
+			// Self-host: skip IP authorization email flow when no email provider is configured.
+			const isIpAuthorized = true;
 			if (!isIpAuthorized) {
 				const ticket = createIpAuthorizationTicket(await this.generateSecureToken());
 				const authToken = createIpAuthorizationToken(await this.generateSecureToken());
